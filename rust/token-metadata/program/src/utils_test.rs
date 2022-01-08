@@ -42,6 +42,9 @@ mod puff_out_test {
             primary_sale_happened: false,
             is_mutable: false,
             edition_nonce: None,
+            collection: None,
+            uses: None,
+            token_type: None,
         };
 
         puff_out_data_fields(&mut metadata);

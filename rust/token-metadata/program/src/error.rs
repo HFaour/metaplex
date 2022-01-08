@@ -304,6 +304,9 @@ pub enum MetadataError {
     // In the legacy system the reservation needs to be of size one for cpu limit reasons
     #[error("In the legacy system the reservation needs to be of size one for cpu limit reasons")]
     ReservationArrayShouldBeSizeOne,
+
+    #[error("This endpoint has been deprecated")]
+    Deprecated,
 }
 
 impl PrintProgramError for MetadataError {

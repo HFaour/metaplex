@@ -1,14 +1,15 @@
 use crate::{
     deprecated_processor::{
-        process_deprecated_create_master_edition, process_deprecated_create_reservation_list,
+        process_deprecated_create_master_edition, process_deprecated_create_metadata_accounts,
+        process_deprecated_create_reservation_list,
         process_deprecated_mint_new_edition_from_master_edition_via_printing_token,
         process_deprecated_mint_printing_tokens, process_deprecated_mint_printing_tokens_via_token,
-        process_deprecated_set_reservation_list,
+        process_deprecated_set_reservation_list, process_deprecated_update_metadata_accounts,
     },
     error::MetadataError,
     instruction::MetadataInstruction,
     state::{
-        Data, Key, MasterEditionV1, MasterEditionV2, Metadata, EDITION, MAX_MASTER_EDITION_LEN,
+        DataV2, Key, MasterEditionV1, MasterEditionV2, Metadata, EDITION, MAX_MASTER_EDITION_LEN,
         PREFIX,
     },
     utils::{
@@ -42,8 +43,8 @@ pub fn process_instruction<'a>(
     let instruction = MetadataInstruction::try_from_slice(input)?;
     match instruction {
         MetadataInstruction::CreateMetadataAccount(args) => {
-            msg!("Instruction: Create Metadata Accounts");
-            process_create_metadata_accounts(
+            msg!("Instruction: Deprecated Create Metadata Accounts");
+            process_deprecated_create_metadata_accounts(
                 program_id,
                 accounts,
                 args.data,
@@ -52,8 +53,8 @@ pub fn process_instruction<'a>(
             )
         }
         MetadataInstruction::UpdateMetadataAccount(args) => {
-            msg!("Instruction: Update Metadata Accounts");
-            process_update_metadata_accounts(
+            msg!("Instruction: Deprecated Update Metadata Accounts");
+            process_deprecated_update_metadata_accounts(
                 program_id,
                 accounts,
                 args.data,
@@ -132,90 +133,6 @@ pub fn process_instruction<'a>(
             process_puff_metadata_account(program_id, accounts)
         }
     }
-}
-
-pub fn process_create_metadata_accounts<'a>(
-    program_id: &'a Pubkey,
-    accounts: &'a [AccountInfo<'a>],
-    data: Data,
-    allow_direct_creator_writes: bool,
-    is_mutable: bool,
-) -> ProgramResult {
-    let account_info_iter = &mut accounts.iter();
-    let metadata_account_info = next_account_info(account_info_iter)?;
-    let mint_info = next_account_info(account_info_iter)?;
-    let mint_authority_info = next_account_info(account_info_iter)?;
-    let payer_account_info = next_account_info(account_info_iter)?;
-    let update_authority_info = next_account_info(account_info_iter)?;
-    let system_account_info = next_account_info(account_info_iter)?;
-    let rent_info = next_account_info(account_info_iter)?;
-
-    process_create_metadata_accounts_logic(
-        &program_id,
-        CreateMetadataAccountsLogicArgs {
-            metadata_account_info,
-            mint_info,
-            mint_authority_info,
-            payer_account_info,
-            update_authority_info,
-            system_account_info,
-            rent_info,
-        },
-        data,
-        allow_direct_creator_writes,
-        is_mutable,
-    )
-}
-
-/// Update existing account instruction
-pub fn process_update_metadata_accounts(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
-    optional_data: Option<Data>,
-    update_authority: Option<Pubkey>,
-    primary_sale_happened: Option<bool>,
-) -> ProgramResult {
-    let account_info_iter = &mut accounts.iter();
-
-    let metadata_account_info = next_account_info(account_info_iter)?;
-    let update_authority_info = next_account_info(account_info_iter)?;
-    let mut metadata = Metadata::from_account_info(metadata_account_info)?;
-
-    assert_owned_by(metadata_account_info, program_id)?;
-    assert_update_authority_is_correct(&metadata, update_authority_info)?;
-
-    if let Some(data) = optional_data {
-        if metadata.is_mutable {
-            assert_data_valid(
-                &data,
-                update_authority_info.key,
-                &metadata,
-                false,
-                update_authority_info.is_signer,
-                true,
-            )?;
-            metadata.data = data;
-        } else {
-            return Err(MetadataError::DataIsImmutable.into());
-        }
-    }
-
-    if let Some(val) = update_authority {
-        metadata.update_authority = val;
-    }
-
-    if let Some(val) = primary_sale_happened {
-        if val {
-            metadata.primary_sale_happened = val
-        } else {
-            return Err(MetadataError::PrimarySaleCanOnlyBeFlippedToTrue.into());
-        }
-    }
-
-    puff_out_data_fields(&mut metadata);
-
-    metadata.serialize(&mut *metadata_account_info.data.borrow_mut())?;
-    Ok(())
 }
 
 pub fn process_update_primary_sale_happened_via_token(

@@ -1,10 +1,10 @@
 use crate::{
     error::MetadataError,
     state::{
-        get_reservation_list, Data, EditionMarker, Key, MasterEditionV1, Metadata, EDITION,
-        EDITION_MARKER_BIT_SIZE, MAX_CREATOR_LIMIT, MAX_EDITION_LEN, MAX_EDITION_MARKER_SIZE,
-        MAX_MASTER_EDITION_LEN, MAX_METADATA_LEN, MAX_NAME_LENGTH, MAX_SYMBOL_LENGTH,
-        MAX_URI_LENGTH, PREFIX,
+        get_reservation_list, Collection, CollectionStatus, Data, DataV2, EditionMarker, Key,
+        MasterEditionV1, Metadata, TokenType, UseType, Uses, EDITION, EDITION_MARKER_BIT_SIZE,
+        MAX_CREATOR_LIMIT, MAX_EDITION_LEN, MAX_EDITION_MARKER_SIZE, MAX_MASTER_EDITION_LEN,
+        MAX_METADATA_LEN, MAX_NAME_LENGTH, MAX_SYMBOL_LENGTH, MAX_URI_LENGTH, PREFIX,
     },
 };
 use arrayref::{array_mut_ref, array_ref, array_refs, mut_array_refs};
@@ -253,6 +253,14 @@ pub fn get_mint_supply(account_info: &AccountInfo) -> Result<u64, ProgramError> 
     let bytes = array_ref![data, 36, 8];
 
     Ok(u64::from_le_bytes(*bytes))
+}
+
+/// cheap method to just get supply off a mint without unpacking whole object
+pub fn get_mint_decimals(account_info: &AccountInfo) -> Result<u8, ProgramError> {
+    // In token program, 36, 8, 1, 1, is the layout, where the first 1 is decimals u8.
+    // so we start at 36.
+    let data = account_info.try_borrow_data().unwrap();
+    Ok(data[44])
 }
 
 pub fn assert_mint_authority_matches_mint(
@@ -591,6 +599,7 @@ pub fn mint_limited_edition<'a>(
         master_metadata.data,
         true,
         false,
+        true,
     )?;
     let edition_authority_seeds = &[
         PREFIX.as_bytes(),
@@ -803,9 +812,10 @@ const SEED_AUTHORITY: Pubkey = Pubkey::new_from_array([
 pub fn process_create_metadata_accounts_logic(
     program_id: &Pubkey,
     accounts: CreateMetadataAccountsLogicArgs,
-    data: Data,
+    data: DataV2,
     allow_direct_creator_writes: bool,
     mut is_mutable: bool,
+    mut is_edition: bool,
 ) -> ProgramResult {
     let CreateMetadataAccountsLogicArgs {
         metadata_account_info,
@@ -876,11 +886,31 @@ pub fn process_create_metadata_accounts_logic(
         false,
     )?;
 
+    let mint_decimals = get_mint_decimals(mint_info)?;
+    let mint_supply = get_mint_supply(mint_info)?;
+
+    let token_type = if is_edition {
+        TokenType::Edition
+    } else if mint_decimals == 0 {
+        TokenType::SemiFungible
+    } else {
+        TokenType::Fungible
+    };
+
     metadata.mint = *mint_info.key;
     metadata.key = Key::MetadataV1;
-    metadata.data = data;
+    metadata.data = Data {
+        name: data.name,
+        symbol: data.symbol,
+        uri: data.uri,
+        seller_fee_basis_points: data.seller_fee_basis_points,
+        creators: data.creators,
+    };
     metadata.is_mutable = is_mutable;
     metadata.update_authority = update_authority_key;
+    metadata.uses = data.uses;
+    metadata.collection = data.collection;
+    metadata.token_type = Some(token_type);
 
     puff_out_data_fields(&mut metadata);
 
