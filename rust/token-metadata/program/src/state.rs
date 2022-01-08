@@ -97,14 +97,6 @@ pub struct Data {
 
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
-pub enum CollectionStatus {
-    NotVerified,
-    Verified,
-    CollectionMasterEdition,
-}
-
-#[repr(C)]
-#[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
 pub enum UseType {
     Burn,
     Multiple,
@@ -131,7 +123,7 @@ pub struct Uses {
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
 pub struct Collection {
-    pub status: CollectionStatus,
+    pub verified: bool,
     pub key: Pubkey,
 }
 
